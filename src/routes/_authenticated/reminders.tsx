@@ -239,14 +239,13 @@ function RemindersPage() {
 
   const cronValid = form.scheduleType !== "cron" || Boolean(parseCron(form.cronExpression));
 
-  const create = useMutation({
+  const save = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Sesi tidak ditemukan");
       const nextRun = computeNextRun(scheduleInput);
       if (!nextRun) throw new Error("Jadwal tidak menghasilkan waktu kirim di masa depan");
 
-      const { error } = await supabase.from("reminders").insert({
-        user_id: user.id,
+      const payload = {
         title: form.title.trim(),
         message: form.message.trim(),
         target_type: form.targetType,
@@ -263,18 +262,33 @@ function RemindersPage() {
         ends_at: scheduleInput.endsAt,
         max_occurrences: form.maxOccurrences ? Number(form.maxOccurrences) : null,
         next_run_at: nextRun.toISOString(),
-        status: "active",
-      });
+      };
+
+      if (editing) {
+        const { error } = await supabase
+          .from("reminders")
+          .update({ ...payload, status: editing.status === "completed" ? "active" : editing.status })
+          .eq("id", editing.id);
+        if (error) throw new Error(error.message);
+        return "updated" as const;
+      }
+
+      const { error } = await supabase
+        .from("reminders")
+        .insert({ ...payload, user_id: user.id, status: "active" });
       if (error) throw new Error(error.message);
+      return "created" as const;
     },
-    onSuccess: () => {
-      toast.success("Pengingat dijadwalkan");
+    onSuccess: (result) => {
+      toast.success(result === "updated" ? "Pengingat diperbarui" : "Pengingat dijadwalkan");
       setForm(EMPTY_FORM);
+      setEditing(null);
       setOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["reminders"] });
     },
     onError: (error: Error) => toast.error(error.message),
   });
+
 
   const toggleStatus = useMutation({
     mutationFn: async (reminder: Reminder) => {
