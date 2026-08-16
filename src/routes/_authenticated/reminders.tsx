@@ -19,12 +19,22 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchContacts, fetchGroupMembers, fetchGroups, fetchReminders, type Reminder } from "@/lib/db";
 import {
   computeNextRun,
+  computeNextRuns,
   describeSchedule,
   formatInTimezone,
   getZonedParts,
@@ -34,6 +44,7 @@ import {
   type ScheduleType,
 } from "@/lib/schedule";
 import { useAuth } from "@/hooks/useAuth";
+
 
 export const Route = createFileRoute("/_authenticated/reminders")({
   head: () => ({
