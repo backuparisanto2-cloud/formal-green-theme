@@ -119,6 +119,80 @@ function nowLocalInput(timezone: string): string {
   return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
 }
 
+function utcToLocalInput(iso: string | null, timezone: string): string {
+  if (!iso) return "";
+  const p = getZonedParts(new Date(iso), timezone);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+}
+
+function reminderToForm(reminder: Reminder): FormState {
+  const tz = reminder.timezone || "Asia/Jakarta";
+  return {
+    title: reminder.title,
+    message: reminder.message,
+    targetType: reminder.target_type === "group" ? "group" : "contact",
+    contactId: reminder.contact_id ?? "",
+    groupId: reminder.group_id ?? "",
+    timezone: tz,
+    scheduleType: reminder.schedule_type as ScheduleType,
+    runAtLocal: utcToLocalInput(reminder.run_at, tz),
+    timeOfDay: reminder.time_of_day ?? "09:00",
+    weekdays: reminder.weekdays?.length ? reminder.weekdays : [1],
+    dayOfMonth: reminder.day_of_month ?? 1,
+    cronExpression: reminder.cron_expression ?? "0 9 * * 1-5",
+    startsAtLocal: utcToLocalInput(reminder.starts_at, tz),
+    endsAtLocal: utcToLocalInput(reminder.ends_at, tz),
+    maxOccurrences: reminder.max_occurrences ? String(reminder.max_occurrences) : "",
+  };
+}
+
+function reminderToScheduleInput(reminder: Reminder) {
+  return {
+    scheduleType: reminder.schedule_type as ScheduleType,
+    timezone: reminder.timezone,
+    runAt: reminder.run_at,
+    timeOfDay: reminder.time_of_day,
+    weekdays: reminder.weekdays,
+    dayOfMonth: reminder.day_of_month,
+    cronExpression: reminder.cron_expression,
+    startsAt: reminder.starts_at,
+    endsAt: reminder.ends_at,
+  };
+}
+
+function UpcomingRuns({ reminder }: { reminder: Reminder }) {
+  const runs = useMemo(() => computeNextRuns(reminderToScheduleInput(reminder), 5), [reminder]);
+
+  if (reminder.status !== "active") {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Jadwal dijeda — tidak ada pengiriman berikutnya sampai dilanjutkan.
+      </p>
+    );
+  }
+
+  if (!runs.length) {
+    return <p className="text-xs text-muted-foreground">Tidak ada jadwal berikutnya.</p>;
+  }
+
+  return (
+    <ol className="space-y-1">
+      {runs.map((run, index) => (
+        <li key={run.toISOString()} className="flex items-center gap-2 text-xs">
+          <CalendarClock
+            className={index === 0 ? "h-3.5 w-3.5 text-primary" : "h-3.5 w-3.5 text-muted-foreground"}
+          />
+          <span className={index === 0 ? "font-medium" : "text-muted-foreground"}>
+            {formatInTimezone(run, reminder.timezone)}
+          </span>
+          {index === 0 && <span className="text-[11px] text-muted-foreground">berikutnya</span>}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function RemindersPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -128,6 +202,9 @@ function RemindersPage() {
   const members = useQuery({ queryKey: ["group-members"], queryFn: fetchGroupMembers });
 
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Reminder | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Reminder | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
   const scheduleInput = useMemo(
@@ -145,7 +222,21 @@ function RemindersPage() {
     [form],
   );
 
-  const preview = useMemo(() => computeNextRun(scheduleInput), [scheduleInput]);
+  const previewRuns = useMemo(() => computeNextRuns(scheduleInput, 5), [scheduleInput]);
+  const preview = previewRuns[0] ?? null;
+
+  function openCreate() {
+    setEditing(null);
+    setForm({ ...EMPTY_FORM, runAtLocal: nowLocalInput(EMPTY_FORM.timezone) });
+    setOpen(true);
+  }
+
+  function openEdit(reminder: Reminder) {
+    setEditing(reminder);
+    setForm(reminderToForm(reminder));
+    setOpen(true);
+  }
+
   const cronValid = form.scheduleType !== "cron" || Boolean(parseCron(form.cronExpression));
 
   const create = useMutation({
