@@ -16,6 +16,9 @@ import { Route as AuthenticatedContactsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedLogsRouteImport } from './routes/_authenticated/logs'
 import { Route as AuthenticatedRemindersRouteImport } from './routes/_authenticated/reminders'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as ApiPublicHooksDispatchRemindersRouteImport } from './routes/api/public/hooks/dispatch-reminders'
+import { Route as ApiPublicWhatsappPullRouteImport } from './routes/api/public/whatsapp/pull'
+import { Route as ApiPublicWhatsappStatusRouteImport } from './routes/api/public/whatsapp/status'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -51,6 +54,22 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicHooksDispatchRemindersRoute =
+  ApiPublicHooksDispatchRemindersRouteImport.update({
+    id: '/api/public/hooks/dispatch-reminders',
+    path: '/api/public/hooks/dispatch-reminders',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicWhatsappPullRoute = ApiPublicWhatsappPullRouteImport.update({
+  id: '/api/public/whatsapp/pull',
+  path: '/api/public/whatsapp/pull',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicWhatsappStatusRoute = ApiPublicWhatsappStatusRouteImport.update({
+  id: '/api/public/whatsapp/status',
+  path: '/api/public/whatsapp/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -59,6 +78,9 @@ export interface FileRoutesByFullPath {
   '/logs': typeof AuthenticatedLogsRoute
   '/reminders': typeof AuthenticatedRemindersRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/api/public/hooks/dispatch-reminders': typeof ApiPublicHooksDispatchRemindersRoute
+  '/api/public/whatsapp/pull': typeof ApiPublicWhatsappPullRoute
+  '/api/public/whatsapp/status': typeof ApiPublicWhatsappStatusRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
@@ -67,6 +89,9 @@ export interface FileRoutesByTo {
   '/reminders': typeof AuthenticatedRemindersRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/': typeof AuthenticatedIndexRoute
+  '/api/public/hooks/dispatch-reminders': typeof ApiPublicHooksDispatchRemindersRoute
+  '/api/public/whatsapp/pull': typeof ApiPublicWhatsappPullRoute
+  '/api/public/whatsapp/status': typeof ApiPublicWhatsappStatusRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -77,12 +102,33 @@ export interface FileRoutesById {
   '/_authenticated/reminders': typeof AuthenticatedRemindersRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/api/public/hooks/dispatch-reminders': typeof ApiPublicHooksDispatchRemindersRoute
+  '/api/public/whatsapp/pull': typeof ApiPublicWhatsappPullRoute
+  '/api/public/whatsapp/status': typeof ApiPublicWhatsappStatusRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/contacts' | '/logs' | '/reminders' | '/settings'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/contacts'
+    | '/logs'
+    | '/reminders'
+    | '/settings'
+    | '/api/public/hooks/dispatch-reminders'
+    | '/api/public/whatsapp/pull'
+    | '/api/public/whatsapp/status'
   fileRoutesByTo: FileRoutesByTo
-  to: '/auth' | '/contacts' | '/logs' | '/reminders' | '/settings' | '/'
+  to:
+    | '/auth'
+    | '/contacts'
+    | '/logs'
+    | '/reminders'
+    | '/settings'
+    | '/'
+    | '/api/public/hooks/dispatch-reminders'
+    | '/api/public/whatsapp/pull'
+    | '/api/public/whatsapp/status'
   id:
     | '__root__'
     | '/_authenticated'
@@ -92,11 +138,17 @@ export interface FileRouteTypes {
     | '/_authenticated/reminders'
     | '/_authenticated/settings'
     | '/_authenticated/'
+    | '/api/public/hooks/dispatch-reminders'
+    | '/api/public/whatsapp/pull'
+    | '/api/public/whatsapp/status'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiPublicHooksDispatchRemindersRoute: typeof ApiPublicHooksDispatchRemindersRoute
+  ApiPublicWhatsappPullRoute: typeof ApiPublicWhatsappPullRoute
+  ApiPublicWhatsappStatusRoute: typeof ApiPublicWhatsappStatusRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -150,6 +202,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/hooks/dispatch-reminders': {
+      id: '/api/public/hooks/dispatch-reminders'
+      path: '/api/public/hooks/dispatch-reminders'
+      fullPath: '/api/public/hooks/dispatch-reminders'
+      preLoaderRoute: typeof ApiPublicHooksDispatchRemindersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/whatsapp/pull': {
+      id: '/api/public/whatsapp/pull'
+      path: '/api/public/whatsapp/pull'
+      fullPath: '/api/public/whatsapp/pull'
+      preLoaderRoute: typeof ApiPublicWhatsappPullRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/whatsapp/status': {
+      id: '/api/public/whatsapp/status'
+      path: '/api/public/whatsapp/status'
+      fullPath: '/api/public/whatsapp/status'
+      preLoaderRoute: typeof ApiPublicWhatsappStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -175,6 +248,9 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiPublicHooksDispatchRemindersRoute: ApiPublicHooksDispatchRemindersRoute,
+  ApiPublicWhatsappPullRoute: ApiPublicWhatsappPullRoute,
+  ApiPublicWhatsappStatusRoute: ApiPublicWhatsappStatusRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
