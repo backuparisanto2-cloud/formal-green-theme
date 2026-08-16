@@ -382,22 +382,23 @@ function RemindersPage() {
         title="Pengingat"
         description="Sekali kirim pada tanggal tertentu, atau berulang harian, mingguan, bulanan, dan cron kustom."
         action={
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button
-                className="gap-2"
-                onClick={() =>
-                  setForm({ ...EMPTY_FORM, runAtLocal: nowLocalInput(EMPTY_FORM.timezone) })
-                }
-              >
-                <Plus className="h-4 w-4" />
-                Buat pengingat
-              </Button>
-            </DialogTrigger>
+          <>
+            <Button className="gap-2" onClick={openCreate}>
+              <Plus className="h-4 w-4" />
+              Buat pengingat
+            </Button>
+            <Dialog
+              open={open}
+              onOpenChange={(next) => {
+                setOpen(next);
+                if (!next) setEditing(null);
+              }}
+            >
             <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle>Pengingat baru</DialogTitle>
+                <DialogTitle>{editing ? "Ubah pengingat" : "Pengingat baru"}</DialogTitle>
               </DialogHeader>
+
 
               <div className="space-y-4">
                 <div className="space-y-2">
