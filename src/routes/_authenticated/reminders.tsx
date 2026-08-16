@@ -632,23 +632,55 @@ function RemindersPage() {
                   </div>
                 )}
 
-                <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
-                  <span className="text-muted-foreground">Kirim berikutnya: </span>
-                  <span className="font-medium">
-                    {preview ? `${formatInTimezone(preview, form.timezone)} (${form.timezone})` : "—"}
-                  </span>
+                <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3 text-sm">
+                  <p className="text-muted-foreground">
+                    Pratinjau jadwal ({form.timezone})
+                  </p>
+                  {previewRuns.length ? (
+                    <ol className="space-y-1">
+                      {previewRuns.map((run, index) => (
+                        <li key={run.toISOString()} className="flex items-center gap-2 text-xs">
+                          <CalendarClock
+                            className={
+                              index === 0
+                                ? "h-3.5 w-3.5 text-primary"
+                                : "h-3.5 w-3.5 text-muted-foreground"
+                            }
+                          />
+                          <span className={index === 0 ? "font-medium" : "text-muted-foreground"}>
+                            {formatInTimezone(run, form.timezone)}
+                          </span>
+                          {index === 0 && (
+                            <span className="text-[11px] text-muted-foreground">berikutnya</span>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Belum ada waktu kirim di masa depan — sesuaikan jadwalnya.
+                    </p>
+                  )}
                 </div>
               </div>
 
               <DialogFooter>
-                <Button onClick={() => create.mutate()} disabled={!canSubmit || create.isPending}>
-                  Jadwalkan
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Batal
+                </Button>
+                <Button
+                  onClick={() => save.mutate()}
+                  disabled={!canSubmit || !preview || save.isPending}
+                >
+                  {editing ? "Simpan perubahan" : "Jadwalkan"}
                 </Button>
               </DialogFooter>
             </DialogContent>
-          </Dialog>
+            </Dialog>
+          </>
         }
       />
+
 
       <div className="space-y-3">
         {(reminders.data ?? []).length === 0 && (
