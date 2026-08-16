@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { BellRing, Pause, Play, Plus, Send, Trash2 } from "lucide-react";
+import { BellRing, CalendarClock, Pause, Pencil, Play, Plus, Send, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/PageHeader";
@@ -19,12 +19,22 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchContacts, fetchGroupMembers, fetchGroups, fetchReminders, type Reminder } from "@/lib/db";
 import {
   computeNextRun,
+  computeNextRuns,
   describeSchedule,
   formatInTimezone,
   getZonedParts,
@@ -34,6 +44,7 @@ import {
   type ScheduleType,
 } from "@/lib/schedule";
 import { useAuth } from "@/hooks/useAuth";
+
 
 export const Route = createFileRoute("/_authenticated/reminders")({
   head: () => ({
@@ -108,6 +119,80 @@ function nowLocalInput(timezone: string): string {
   return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
 }
 
+function utcToLocalInput(iso: string | null, timezone: string): string {
+  if (!iso) return "";
+  const p = getZonedParts(new Date(iso), timezone);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+}
+
+function reminderToForm(reminder: Reminder): FormState {
+  const tz = reminder.timezone || "Asia/Jakarta";
+  return {
+    title: reminder.title,
+    message: reminder.message,
+    targetType: reminder.target_type === "group" ? "group" : "contact",
+    contactId: reminder.contact_id ?? "",
+    groupId: reminder.group_id ?? "",
+    timezone: tz,
+    scheduleType: reminder.schedule_type as ScheduleType,
+    runAtLocal: utcToLocalInput(reminder.run_at, tz),
+    timeOfDay: reminder.time_of_day ?? "09:00",
+    weekdays: reminder.weekdays?.length ? reminder.weekdays : [1],
+    dayOfMonth: reminder.day_of_month ?? 1,
+    cronExpression: reminder.cron_expression ?? "0 9 * * 1-5",
+    startsAtLocal: utcToLocalInput(reminder.starts_at, tz),
+    endsAtLocal: utcToLocalInput(reminder.ends_at, tz),
+    maxOccurrences: reminder.max_occurrences ? String(reminder.max_occurrences) : "",
+  };
+}
+
+function reminderToScheduleInput(reminder: Reminder) {
+  return {
+    scheduleType: reminder.schedule_type as ScheduleType,
+    timezone: reminder.timezone,
+    runAt: reminder.run_at,
+    timeOfDay: reminder.time_of_day,
+    weekdays: reminder.weekdays,
+    dayOfMonth: reminder.day_of_month,
+    cronExpression: reminder.cron_expression,
+    startsAt: reminder.starts_at,
+    endsAt: reminder.ends_at,
+  };
+}
+
+function UpcomingRuns({ reminder }: { reminder: Reminder }) {
+  const runs = useMemo(() => computeNextRuns(reminderToScheduleInput(reminder), 5), [reminder]);
+
+  if (reminder.status !== "active") {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Jadwal dijeda — tidak ada pengiriman berikutnya sampai dilanjutkan.
+      </p>
+    );
+  }
+
+  if (!runs.length) {
+    return <p className="text-xs text-muted-foreground">Tidak ada jadwal berikutnya.</p>;
+  }
+
+  return (
+    <ol className="space-y-1">
+      {runs.map((run, index) => (
+        <li key={run.toISOString()} className="flex items-center gap-2 text-xs">
+          <CalendarClock
+            className={index === 0 ? "h-3.5 w-3.5 text-primary" : "h-3.5 w-3.5 text-muted-foreground"}
+          />
+          <span className={index === 0 ? "font-medium" : "text-muted-foreground"}>
+            {formatInTimezone(run, reminder.timezone)}
+          </span>
+          {index === 0 && <span className="text-[11px] text-muted-foreground">berikutnya</span>}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function RemindersPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -117,6 +202,9 @@ function RemindersPage() {
   const members = useQuery({ queryKey: ["group-members"], queryFn: fetchGroupMembers });
 
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Reminder | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Reminder | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
   const scheduleInput = useMemo(
@@ -134,17 +222,30 @@ function RemindersPage() {
     [form],
   );
 
-  const preview = useMemo(() => computeNextRun(scheduleInput), [scheduleInput]);
+  const previewRuns = useMemo(() => computeNextRuns(scheduleInput, 5), [scheduleInput]);
+  const preview = previewRuns[0] ?? null;
+
+  function openCreate() {
+    setEditing(null);
+    setForm({ ...EMPTY_FORM, runAtLocal: nowLocalInput(EMPTY_FORM.timezone) });
+    setOpen(true);
+  }
+
+  function openEdit(reminder: Reminder) {
+    setEditing(reminder);
+    setForm(reminderToForm(reminder));
+    setOpen(true);
+  }
+
   const cronValid = form.scheduleType !== "cron" || Boolean(parseCron(form.cronExpression));
 
-  const create = useMutation({
+  const save = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Sesi tidak ditemukan");
       const nextRun = computeNextRun(scheduleInput);
       if (!nextRun) throw new Error("Jadwal tidak menghasilkan waktu kirim di masa depan");
 
-      const { error } = await supabase.from("reminders").insert({
-        user_id: user.id,
+      const payload = {
         title: form.title.trim(),
         message: form.message.trim(),
         target_type: form.targetType,
@@ -161,18 +262,33 @@ function RemindersPage() {
         ends_at: scheduleInput.endsAt,
         max_occurrences: form.maxOccurrences ? Number(form.maxOccurrences) : null,
         next_run_at: nextRun.toISOString(),
-        status: "active",
-      });
+      };
+
+      if (editing) {
+        const { error } = await supabase
+          .from("reminders")
+          .update({ ...payload, status: editing.status === "completed" ? "active" : editing.status })
+          .eq("id", editing.id);
+        if (error) throw new Error(error.message);
+        return "updated" as const;
+      }
+
+      const { error } = await supabase
+        .from("reminders")
+        .insert({ ...payload, user_id: user.id, status: "active" });
       if (error) throw new Error(error.message);
+      return "created" as const;
     },
-    onSuccess: () => {
-      toast.success("Pengingat dijadwalkan");
+    onSuccess: (result) => {
+      toast.success(result === "updated" ? "Pengingat diperbarui" : "Pengingat dijadwalkan");
       setForm(EMPTY_FORM);
+      setEditing(null);
       setOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["reminders"] });
     },
     onError: (error: Error) => toast.error(error.message),
   });
+
 
   const toggleStatus = useMutation({
     mutationFn: async (reminder: Reminder) => {
@@ -266,22 +382,23 @@ function RemindersPage() {
         title="Pengingat"
         description="Sekali kirim pada tanggal tertentu, atau berulang harian, mingguan, bulanan, dan cron kustom."
         action={
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button
-                className="gap-2"
-                onClick={() =>
-                  setForm({ ...EMPTY_FORM, runAtLocal: nowLocalInput(EMPTY_FORM.timezone) })
-                }
-              >
-                <Plus className="h-4 w-4" />
-                Buat pengingat
-              </Button>
-            </DialogTrigger>
+          <>
+            <Button className="gap-2" onClick={openCreate}>
+              <Plus className="h-4 w-4" />
+              Buat pengingat
+            </Button>
+            <Dialog
+              open={open}
+              onOpenChange={(next) => {
+                setOpen(next);
+                if (!next) setEditing(null);
+              }}
+            >
             <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle>Pengingat baru</DialogTitle>
+                <DialogTitle>{editing ? "Ubah pengingat" : "Pengingat baru"}</DialogTitle>
               </DialogHeader>
+
 
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -515,23 +632,55 @@ function RemindersPage() {
                   </div>
                 )}
 
-                <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
-                  <span className="text-muted-foreground">Kirim berikutnya: </span>
-                  <span className="font-medium">
-                    {preview ? `${formatInTimezone(preview, form.timezone)} (${form.timezone})` : "—"}
-                  </span>
+                <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3 text-sm">
+                  <p className="text-muted-foreground">
+                    Pratinjau jadwal ({form.timezone})
+                  </p>
+                  {previewRuns.length ? (
+                    <ol className="space-y-1">
+                      {previewRuns.map((run, index) => (
+                        <li key={run.toISOString()} className="flex items-center gap-2 text-xs">
+                          <CalendarClock
+                            className={
+                              index === 0
+                                ? "h-3.5 w-3.5 text-primary"
+                                : "h-3.5 w-3.5 text-muted-foreground"
+                            }
+                          />
+                          <span className={index === 0 ? "font-medium" : "text-muted-foreground"}>
+                            {formatInTimezone(run, form.timezone)}
+                          </span>
+                          {index === 0 && (
+                            <span className="text-[11px] text-muted-foreground">berikutnya</span>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Belum ada waktu kirim di masa depan — sesuaikan jadwalnya.
+                    </p>
+                  )}
                 </div>
               </div>
 
               <DialogFooter>
-                <Button onClick={() => create.mutate()} disabled={!canSubmit || create.isPending}>
-                  Jadwalkan
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Batal
+                </Button>
+                <Button
+                  onClick={() => save.mutate()}
+                  disabled={!canSubmit || !preview || save.isPending}
+                >
+                  {editing ? "Simpan perubahan" : "Jadwalkan"}
                 </Button>
               </DialogFooter>
             </DialogContent>
-          </Dialog>
+            </Dialog>
+          </>
         }
       />
+
 
       <div className="space-y-3">
         {(reminders.data ?? []).length === 0 && (
@@ -582,12 +731,36 @@ function RemindersPage() {
                     ? ` · berikutnya ${formatInTimezone(new Date(reminder.next_run_at), reminder.timezone)}`
                     : ""}
                 </p>
+
+                <button
+                  type="button"
+                  onClick={() => setExpanded(expanded === reminder.id ? null : reminder.id)}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                >
+                  <CalendarClock className="h-3.5 w-3.5" />
+                  {expanded === reminder.id ? "Sembunyikan jadwal" : "Lihat 5 jadwal berikutnya"}
+                </button>
+
+                {expanded === reminder.id && (
+                  <div className="rounded-lg border border-border bg-muted/40 p-3">
+                    <UpcomingRuns reminder={reminder} />
+                  </div>
+                )}
               </div>
 
               <div className="flex shrink-0 flex-wrap gap-2">
                 <Button variant="outline" size="sm" className="gap-2" onClick={() => sendNow.mutate(reminder)}>
                   <Send className="h-3.5 w-3.5" />
                   Kirim sekarang
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => openEdit(reminder)}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Ubah
                 </Button>
                 <Button
                   variant="outline"
@@ -609,15 +782,45 @@ function RemindersPage() {
                   variant="ghost"
                   size="icon"
                   aria-label={`Hapus ${reminder.title}`}
-                  onClick={() => remove.mutate(reminder.id)}
+                  onClick={() => setPendingDelete(reminder)}
                 >
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
               </div>
+
             </CardContent>
           </Card>
         ))}
       </div>
+
+      <AlertDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(next) => {
+          if (!next) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus pengingat?</AlertDialogTitle>
+            <AlertDialogDescription>
+              &ldquo;{pendingDelete?.title}&rdquo; akan dihapus permanen beserta jadwalnya. Riwayat
+              pengiriman yang sudah ada tetap tersimpan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingDelete) remove.mutate(pendingDelete.id);
+                setPendingDelete(null);
+              }}
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
+
   );
 }
