@@ -237,6 +237,29 @@ export function computeNextRun(input: ScheduleInput, from: Date = new Date()): D
   return null;
 }
 
+/**
+ * Preview the next `count` absolute run times for a schedule.
+ * Stops early when the schedule has no further occurrence.
+ */
+export function computeNextRuns(
+  input: ScheduleInput,
+  count = 5,
+  from: Date = new Date(),
+): Date[] {
+  const runs: Date[] = [];
+  let cursor = from;
+  for (let i = 0; i < count; i += 1) {
+    const next = computeNextRun(input, cursor);
+    if (!next) break;
+    runs.push(next);
+    cursor = next;
+    if (input.scheduleType === "once") break;
+  }
+  return runs;
+}
+
+
+
 export function describeSchedule(input: ScheduleInput): string {
   const time = input.timeOfDay ?? "09:00";
   switch (input.scheduleType) {
