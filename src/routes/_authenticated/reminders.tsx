@@ -731,12 +731,36 @@ function RemindersPage() {
                     ? ` · berikutnya ${formatInTimezone(new Date(reminder.next_run_at), reminder.timezone)}`
                     : ""}
                 </p>
+
+                <button
+                  type="button"
+                  onClick={() => setExpanded(expanded === reminder.id ? null : reminder.id)}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                >
+                  <CalendarClock className="h-3.5 w-3.5" />
+                  {expanded === reminder.id ? "Sembunyikan jadwal" : "Lihat 5 jadwal berikutnya"}
+                </button>
+
+                {expanded === reminder.id && (
+                  <div className="rounded-lg border border-border bg-muted/40 p-3">
+                    <UpcomingRuns reminder={reminder} />
+                  </div>
+                )}
               </div>
 
               <div className="flex shrink-0 flex-wrap gap-2">
                 <Button variant="outline" size="sm" className="gap-2" onClick={() => sendNow.mutate(reminder)}>
                   <Send className="h-3.5 w-3.5" />
                   Kirim sekarang
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => openEdit(reminder)}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Ubah
                 </Button>
                 <Button
                   variant="outline"
@@ -758,11 +782,12 @@ function RemindersPage() {
                   variant="ghost"
                   size="icon"
                   aria-label={`Hapus ${reminder.title}`}
-                  onClick={() => remove.mutate(reminder.id)}
+                  onClick={() => setPendingDelete(reminder)}
                 >
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
               </div>
+
             </CardContent>
           </Card>
         ))}
